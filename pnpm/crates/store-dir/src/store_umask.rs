@@ -10,7 +10,9 @@ use std::{fmt, str::FromStr};
 /// umask of whichever process first wrote the file.
 ///
 /// Written as octal digits, like a shell `umask` (`"002"`, `"022"`, `"077"`),
-/// with an optional `0o` prefix.
+/// with an optional `0o` prefix. The owner's bits cannot be masked: pnpm
+/// must read what it writes to the store, and executables must stay
+/// executable.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StoreUmask(u32);
 
@@ -26,7 +28,7 @@ impl StoreUmask {
 
 /// Error type of [`StoreUmask::from_str`].
 #[derive(Debug, Display, Error)]
-#[display("storeUmask must be an octal number from 000 to 777, got {value:?}")]
+#[display("storeUmask must be an octal number from 000 to 077, got {value:?}")]
 pub struct ParseStoreUmaskError {
     #[error(not(source))]
     pub value: String,
@@ -46,7 +48,7 @@ impl FromStr for StoreUmask {
             return Err(error());
         }
         match u32::from_str_radix(digits, 8) {
-            Ok(mask) if mask <= 0o777 => Ok(StoreUmask(mask)),
+            Ok(mask) if mask <= 0o077 => Ok(StoreUmask(mask)),
             _ => Err(error()),
         }
     }

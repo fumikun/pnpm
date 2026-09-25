@@ -18,6 +18,13 @@ fn rejects_values_that_are_not_an_octal_umask() {
 }
 
 #[test]
+fn rejects_a_mask_that_clears_the_owner_bits() {
+    for value in ["100", "400", "700", "777"] {
+        assert!(value.parse::<StoreUmask>().is_err(), "must reject {value:?}");
+    }
+}
+
+#[test]
 fn clears_the_masked_bits_from_the_file_mode() {
     let umask = StoreUmask(0o027);
     assert_eq!(umask.file_mode(false), 0o640);
@@ -27,7 +34,7 @@ fn clears_the_masked_bits_from_the_file_mode() {
 #[test]
 fn displays_three_octal_digits() {
     assert_eq!(StoreUmask(0o002).to_string(), "002");
-    assert_eq!(StoreUmask(0o777).to_string(), "777");
+    assert_eq!(StoreUmask(0o077).to_string(), "077");
 }
 
 #[test]

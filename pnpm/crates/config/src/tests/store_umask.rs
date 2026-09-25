@@ -70,7 +70,7 @@ fn the_environment_sets_the_store_umask() {
 
 #[test]
 fn rejects_a_value_that_is_not_an_octal_umask() {
-    for value in ["8", "1000", "true", "-1"] {
+    for value in ["8", "777", "1000", "true", "-1"] {
         let result = serde_saphyr::from_str::<WorkspaceSettings>(&format!("storeUmask: {value}"));
         assert!(result.is_err(), "must reject {value}: {result:?}");
     }
