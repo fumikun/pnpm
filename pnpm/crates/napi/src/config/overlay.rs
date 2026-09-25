@@ -1,12 +1,12 @@
 use super::{
-    BTreeMap, Config, ConfigOverlay, HashMap, Host, Path, StoreDir, default_registry, nerf_dart,
+    BTreeMap, Config, ConfigOverlay, HashMap, Host, Path, default_registry, nerf_dart,
     normalize_auth_key,
 };
 
 /// Store, home and cache directories.
 pub(super) fn apply_store_dirs(config: &mut Config, overlay: &ConfigOverlay, dir: &Path) {
     if let Some(store_dir) = &overlay.store_dir {
-        config.store_dir = StoreDir::new(store_dir.clone());
+        config.store_dir.relocate(store_dir.clone());
     } else if let Some(pnpm_home_dir) = &overlay.pnpm_home_dir
         && !config.explicit_settings.contains_key("storeDir")
     {

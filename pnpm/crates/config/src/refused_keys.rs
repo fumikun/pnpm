@@ -25,6 +25,7 @@ const PROJECT_MANIFEST_SKIPPED_KEYS: &[&str] = &[
     "npmrcAuthFile",
     "pnpmHomeDir",
     "stateDir",
+    "storeUmask",
     "userconfig",
     "bin",
     "dir",

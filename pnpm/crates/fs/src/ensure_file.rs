@@ -163,8 +163,56 @@ pub fn ensure_parent_dir(dir: &Path) -> Result<(), EnsureFileError> {
 pub fn ensure_file(
     file_path: &Path,
     content: &[u8],
-    #[cfg_attr(windows, allow(unused, reason = "POSIX mode bits are only applied on Unix"))]
     mode: Option<u32>,
+) -> Result<(), EnsureFileError> {
+    write_content_addressed_file(file_path, content, CreationMode::Masked(mode))
+}
+
+/// [`ensure_file`], except that a file this call creates gets exactly
+/// `mode`, whatever the process umask. A matching file already at
+/// `file_path` keeps its mode: it may belong to another user, who alone
+/// can change it. On Windows `mode` is ignored.
+pub fn ensure_file_with_exact_mode(
+    file_path: &Path,
+    content: &[u8],
+    mode: u32,
+) -> Result<(), EnsureFileError> {
+    write_content_addressed_file(file_path, content, CreationMode::Exact(mode))
+}
+
+/// How [`ensure_file`] and [`ensure_file_with_exact_mode`] set the
+/// permission bits of a file they create.
+#[derive(Debug, Clone, Copy)]
+enum CreationMode {
+    /// These bits, or the platform default for `None`, narrowed by the
+    /// process umask.
+    Masked(Option<u32>),
+    /// Exactly these bits.
+    Exact(u32),
+}
+
+impl CreationMode {
+    fn requested(self) -> Option<u32> {
+        match self {
+            CreationMode::Masked(mode) => mode,
+            CreationMode::Exact(mode) => Some(mode),
+        }
+    }
+
+    /// Widen `file` back to the requested bits when the process umask
+    /// narrowed them at creation.
+    fn apply(self, file: &File) -> io::Result<()> {
+        match self {
+            CreationMode::Masked(_) => Ok(()),
+            CreationMode::Exact(mode) => crate::file_mode::set_file_mode(file, mode),
+        }
+    }
+}
+
+fn write_content_addressed_file(
+    file_path: &Path,
+    content: &[u8],
+    mode: CreationMode,
 ) -> Result<(), EnsureFileError> {
     // See the "Process-local per-path mutex" bullet above and
     // [`cas_write_lock`] for the rationale.
@@ -177,14 +225,15 @@ pub fn ensure_file(
     #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt;
-        if let Some(mode) = mode {
+        if let Some(mode) = mode.requested() {
             options.mode(mode);
         }
     }
 
     match retry_on_fd_pressure(|| options.open(file_path)) {
-        Ok(mut file) => file
-            .write_all(content)
+        Ok(mut file) => mode
+            .apply(&file)
+            .and_then(|()| file.write_all(content))
             .map_err(|error| EnsureFileError::WriteFile {
                 file_path: file_path.to_path_buf(),
                 error,
@@ -272,7 +321,7 @@ static CAS_LOCK_STRIPES: [Mutex<()>; NUM_CAS_LOCK_STRIPES] =
 fn verify_or_rewrite(
     file_path: &Path,
     content: &[u8],
-    mode: Option<u32>,
+    mode: CreationMode,
 ) -> Result<(), EnsureFileError> {
     match fs::symlink_metadata(file_path) {
         Ok(meta) if !meta.file_type().is_file() => {
@@ -369,16 +418,20 @@ fn file_equals_bytes(file_path: &Path, content: &[u8]) -> io::Result<bool> {
 fn write_atomic(
     file_path: &Path,
     content: &[u8],
-    mode: Option<u32>,
+    mode: CreationMode,
 ) -> Result<(), EnsureFileError> {
     let parent = file_path.parent().unwrap_or_else(|| Path::new("."));
     let name = file_path
         .file_name()
         .map(|file_name| file_name.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let (tmp_path, mut file) = create_exclusive_temp_file(parent, &strip_dash_suffix(&name), mode)?;
+    let (tmp_path, mut file) =
+        create_exclusive_temp_file(parent, &strip_dash_suffix(&name), mode.requested())?;
 
-    if let Err(error) = file.write_all(content) {
+    if let Err(error) = mode
+        .apply(&file)
+        .and_then(|()| file.write_all(content))
+    {
         drop(file);
         let _ = fs::remove_file(&tmp_path);
         return Err(EnsureFileError::WriteFile { file_path: tmp_path, error });

@@ -1,6 +1,6 @@
 use super::{
     Config, EnvVar, GetCurrentDir, GetHomeDir, GitHost, HashMap, HoistPatterns, LinkProbe,
-    Lockfile, NodeLinker, Path, StoreDir, WantedLockfileSelection, WorkspaceSettings,
+    Lockfile, NodeLinker, Path, WantedLockfileSelection, WorkspaceSettings,
     collect_explicit_settings, create_matcher, default_store_dir, esm_node_path_loader,
     get_current_branch, store_path,
 };
@@ -463,7 +463,7 @@ impl Config {
     where
         Sys: EnvVar + GetCurrentDir + GetHomeDir + LinkProbe,
     {
-        self.store_dir = default_store_dir::<Sys>();
+        self.store_dir.relocate(default_store_dir::<Sys>());
         self.resolve_default_store_dir::<Sys>(start_dir);
         self.explicit_settings.remove("storeDir");
         let virtual_store_dir_explicit = self.explicit_settings.contains_key("virtualStoreDir");
@@ -485,7 +485,7 @@ impl Config {
     where
         Sys: GetHomeDir + LinkProbe,
     {
-        self.store_dir = StoreDir::new(pnpm_home_dir.join("store"));
+        self.store_dir.relocate(pnpm_home_dir.join("store"));
         self.resolve_default_store_dir::<Sys>(start_dir);
     }
 
@@ -535,7 +535,7 @@ impl Config {
             .unwrap_or(&home_dir)
             .to_path_buf();
         let resolved = store_path::resolve_store_dir::<Sys>(store_root, &pnpm_home_dir, start_dir);
-        self.store_dir = StoreDir::from(resolved);
+        self.store_dir.relocate(resolved);
     }
 
     /// Return the `virtualStoreDir` value pnpm exposes externally — the

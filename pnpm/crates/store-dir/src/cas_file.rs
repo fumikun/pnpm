@@ -2,8 +2,9 @@ use crate::{FileHash, StoreDir};
 use derive_more::{Display, Error};
 use miette::Diagnostic;
 use pnpm_fs::{
-    EnsureFileError, cas_write_lock, create_exclusive_temp_file, ensure_file, ensure_parent_dir,
-    file_mode::{EXEC_MODE, is_executable},
+    EnsureFileError, cas_write_lock, create_exclusive_temp_file, ensure_file,
+    ensure_file_with_exact_mode, ensure_parent_dir,
+    file_mode::{EXEC_MODE, is_executable, set_file_mode},
     rename_with_retry,
 };
 use sha2::{Digest, Sha512};
@@ -82,6 +83,10 @@ pub enum WriteCasFileFromReaderError {
 
 impl StoreDir {
     /// Write a file from an npm package to the store directory.
+    ///
+    /// With a [`umask`](Self::umask), a file this call creates gets the
+    /// mode [`StoreUmask::file_mode`](crate::StoreUmask::file_mode) derives
+    /// from it. A matching file already in the store keeps its mode.
     pub fn write_cas_file(
         &self,
         buffer: &[u8],
@@ -89,11 +94,16 @@ impl StoreDir {
     ) -> Result<(PathBuf, FileHash), WriteCasFileError> {
         let file_hash = Sha512::digest(buffer);
         let file_path = self.cas_file_path(file_hash, executable);
-        let mode = executable.then_some(EXEC_MODE);
 
         self.ensure_shard_dir(&file_path, file_hash[0])?;
 
-        ensure_file(&file_path, buffer, mode).map_err(WriteCasFileError::WriteFile)?;
+        match self.umask() {
+            Some(umask) => {
+                ensure_file_with_exact_mode(&file_path, buffer, umask.file_mode(executable))
+            }
+            None => ensure_file(&file_path, buffer, executable.then_some(EXEC_MODE)),
+        }
+        .map_err(WriteCasFileError::WriteFile)?;
         Ok((file_path, file_hash))
     }
 
@@ -120,6 +130,9 @@ impl StoreDir {
     /// reaches a content-addressed path — a truncated source (e.g. a
     /// cut-short archive) must not commit its partial content to the
     /// store, even though such a blob would be correctly addressed.
+    ///
+    /// A [`umask`](Self::umask) sets the mode of a new file as in
+    /// [`StoreDir::write_cas_file`].
     pub fn write_cas_file_from_reader(
         &self,
         reader: &mut dyn Read,
@@ -128,9 +141,18 @@ impl StoreDir {
     ) -> Result<(PathBuf, FileHash, u64), WriteCasFileFromReaderError> {
         let files_dir = self.files_dir();
         ensure_parent_dir(files_dir).map_err(write_cas_error)?;
-        let mode = executable.then_some(EXEC_MODE);
+        let exact_mode = self
+            .umask()
+            .map(|umask| umask.file_mode(executable));
+        let mode = exact_mode.or_else(|| executable.then_some(EXEC_MODE));
         let (tmp_path, file) =
             create_exclusive_temp_file(files_dir, "stream", mode).map_err(write_cas_error)?;
+        if let Some(mode) = exact_mode
+            && let Err(error) = set_file_mode(&file, mode)
+        {
+            let _ = fs::remove_file(&tmp_path);
+            return Err(write_cas_error(EnsureFileError::WriteFile { file_path: tmp_path, error }));
+        }
 
         let streamed = stream_into_temp_file(reader, file, &tmp_path, expected_size);
         let (file_hash, size) = match streamed {

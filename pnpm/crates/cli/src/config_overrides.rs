@@ -12,7 +12,6 @@ use pnpm_config::{
     resolve_child_concurrency,
 };
 use pnpm_fs::lexical_normalize;
-use pnpm_store_dir::StoreDir;
 use std::{
     collections::{BTreeMap, HashSet},
     ffi::{OsStr, OsString},

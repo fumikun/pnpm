@@ -10,6 +10,7 @@ pub use prune::*;
 pub use store_dir::*;
 pub use store_index::*;
 pub use store_lock::{StoreLockError, StoreOperationLock};
+pub use store_umask::*;
 pub use upload::*;
 
 mod add_files_from_dir;
@@ -23,4 +24,5 @@ mod prune;
 mod prune_cas;
 mod store_dir;
 mod store_lock;
+mod store_umask;
 mod upload;

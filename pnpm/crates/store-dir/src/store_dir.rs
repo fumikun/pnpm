@@ -1,3 +1,4 @@
+use crate::StoreUmask;
 use dashmap::DashSet;
 use serde::{Deserialize, Serialize};
 use sha2::{Sha512, digest};
@@ -64,6 +65,12 @@ pub struct StoreDir {
     /// initialization across rayon threads stays race-free.
     #[serde(skip, default)]
     cached_files_dir: OnceLock<PathBuf>,
+
+    /// The `storeUmask` setting, which decides the mode of the files this
+    /// process writes to the store. `None` leaves it to the process umask.
+    /// A setting rather than part of the location, so it is neither
+    /// serialised nor compared.
+    umask: Option<StoreUmask>,
 }
 
 impl From<StoreDir> for PathBuf {
@@ -94,7 +101,12 @@ impl From<PathBuf> for StoreDir {
         } else {
             root.join(STORE_VERSION)
         };
-        StoreDir { root, ensured_shards: DashSet::new(), cached_files_dir: OnceLock::new() }
+        StoreDir {
+            root,
+            ensured_shards: DashSet::new(),
+            cached_files_dir: OnceLock::new(),
+            umask: None,
+        }
     }
 }
 
@@ -102,6 +114,24 @@ impl StoreDir {
     /// Construct an instance of [`StoreDir`].
     pub fn new(root: impl Into<PathBuf>) -> Self {
         root.into().into()
+    }
+
+    /// Point this store at `root`, as [`StoreDir::from`] would, keeping
+    /// its [`umask`](Self::umask).
+    pub fn relocate(&mut self, root: impl Into<PathBuf>) {
+        let umask = self.umask;
+        *self = StoreDir::new(root);
+        self.umask = umask;
+    }
+
+    /// The `storeUmask` setting this store writes files with.
+    pub fn umask(&self) -> Option<StoreUmask> {
+        self.umask
+    }
+
+    /// Set the `storeUmask` setting this store writes files with.
+    pub fn set_umask(&mut self, umask: Option<StoreUmask>) {
+        self.umask = umask;
     }
 
     /// Mark the shard keyed by the first byte of a sha512 digest as "parent

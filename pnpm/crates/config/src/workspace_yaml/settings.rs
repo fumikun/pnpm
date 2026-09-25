@@ -215,6 +215,12 @@ pub struct WorkspaceSettings {
     pub public_hoist_pattern: Option<Option<Vec<String>>>,
     pub shamefully_hoist: Option<bool>,
     pub store_dir: Option<String>,
+    /// `storeUmask`: the permission bits cleared from files pnpm writes to
+    /// the store. See [`StoreDir::umask`](pnpm_store_dir::StoreDir::umask).
+    /// Accepted from the global `config.yaml` and the environment only,
+    /// because a repository that cleared it could make the user's shared
+    /// store writable by others.
+    pub store_umask: Option<pnpm_store_dir::StoreUmask>,
     /// Machine preferences accepted from global `config.yaml` and the
     /// environment. A repository cannot change the user's backup policy.
     pub macos_backup: Option<MacosBackupSettings>,

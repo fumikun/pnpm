@@ -1,6 +1,6 @@
 use super::{
-    EnsureFileError, create_exclusive_temp_file, ensure_file, file_equals_bytes, strip_dash_suffix,
-    temp_path_in,
+    EnsureFileError, create_exclusive_temp_file, ensure_file, ensure_file_with_exact_mode,
+    file_equals_bytes, strip_dash_suffix, temp_path_in,
 };
 use std::{fs, io, path::Path};
 use tempfile::tempdir;
@@ -87,6 +87,65 @@ fn unix_mode_is_applied_on_new_files() {
         .mode()
         & 0o700;
     assert_eq!(mode, 0o700, "owner rwx bits of 0o755 must survive any reasonable umask");
+}
+
+/// The group and other write bits are the ones a typical umask (`022`)
+/// clears, so asserting on them shows the process umask was overridden.
+#[cfg(unix)]
+#[test]
+fn exact_mode_overrides_the_process_umask_on_new_files() {
+    let tmp = tempdir().unwrap();
+    let plain = tmp.path().join("plain");
+    let executable = tmp.path().join("executable");
+
+    ensure_file_with_exact_mode(&plain, b"plain", 0o666).expect("write plain file");
+    ensure_file_with_exact_mode(&executable, b"exec", 0o777).expect("write executable file");
+
+    assert_eq!(unix_mode(&plain), 0o666);
+    assert_eq!(unix_mode(&executable), 0o777);
+}
+
+#[cfg(unix)]
+#[test]
+fn exact_mode_applies_to_a_rewritten_torn_file() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let tmp = tempdir().unwrap();
+    let path = tmp.path().join("torn");
+    fs::write(&path, b"garbage").unwrap();
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+
+    ensure_file_with_exact_mode(&path, b"fresh", 0o664).expect("torn blob is rewritten");
+
+    assert_eq!(fs::read(&path).unwrap(), b"fresh");
+    assert_eq!(unix_mode(&path), 0o664);
+}
+
+/// A matching file may belong to another user sharing the store, who
+/// alone may change its mode.
+#[cfg(unix)]
+#[test]
+fn exact_mode_leaves_a_matching_file_alone() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let tmp = tempdir().unwrap();
+    let path = tmp.path().join("existing");
+    fs::write(&path, b"same").unwrap();
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+
+    ensure_file_with_exact_mode(&path, b"same", 0o664).expect("matching file is kept");
+
+    assert_eq!(unix_mode(&path), 0o600);
+}
+
+#[cfg(unix)]
+fn unix_mode(path: &Path) -> u32 {
+    use std::os::unix::fs::PermissionsExt;
+    fs::metadata(path)
+        .unwrap()
+        .permissions()
+        .mode()
+        & 0o7777
 }
 
 #[test]

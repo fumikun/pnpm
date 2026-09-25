@@ -38,7 +38,6 @@ use pnpm_config::{
     PackageExtension, PackageImportMethod, default_registry,
 };
 use pnpm_network::{AuthHeaders, ProxyConfig, TlsConfig, nerf_dart, normalize_auth_key};
-use pnpm_store_dir::StoreDir;
 
 /// Host-supplied config values. Every field is optional: `None` keeps the
 /// value [`Config::current`] resolved from `.npmrc` / `pnpm-workspace.yaml` /

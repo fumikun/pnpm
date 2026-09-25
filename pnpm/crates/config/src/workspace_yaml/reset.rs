@@ -161,6 +161,7 @@ impl WorkspaceSettings {
         match key {
             "macosBackup" => config.macos_backup.clone_from(&defaults.macos_backup),
             "storeDir" => config.reset_store_dir_to_default::<Sys>(base_dir),
+            "storeUmask" => config.store_dir.set_umask(defaults.store_dir.umask()),
             "lockfileDir" => {
                 config.lockfile_dir = None;
                 reanchor_lockfile_paths(config, base_dir);

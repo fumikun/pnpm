@@ -339,7 +339,7 @@ fn acquire_install_lock<Reporter: self::Reporter>(path: &Path, subject: &str) ->
 fn package_manager_engine_config(config: &Config) -> miette::Result<Config> {
     let global_pkg_dir = config.global_pkg_dir.as_ref().ok_or(EngineError::NoGlobalDir)?;
     let mut config = config.clone();
-    config.store_dir = StoreDir::new(package_manager_engine_store_root(global_pkg_dir));
+    config.store_dir.relocate(package_manager_engine_store_root(global_pkg_dir));
     config.global_virtual_store_dir = config.store_dir.links();
     Ok(config)
 }

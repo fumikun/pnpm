@@ -16,7 +16,7 @@ use super::{
 /// unmapped.
 #[test]
 fn from_resolved_reports_every_setting() {
-    let config = Config {
+    let mut config = Config {
         scope: Some("@acme".to_string()),
         pnpr_server: Some("https://pnpr.example".to_string()),
         frozen_lockfile: Some(true),
@@ -104,6 +104,7 @@ fn from_resolved_reports_every_setting() {
         .collect(),
         ..Config::default()
     };
+    config.store_dir.set_umask(Some("002".parse().unwrap()));
 
     let projected = WorkspaceSettings::from_resolved(&config);
     let Ok(serde_json::Value::Object(map)) = serde_json::to_value(&projected) else {

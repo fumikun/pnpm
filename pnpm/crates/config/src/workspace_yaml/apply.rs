@@ -1,7 +1,7 @@
 use super::{
-    Config, Path, PnpmfileSetting, ProxyKeys, ProxyValue, SideEffectsCacheSetting, StoreDir,
-    UpdateConfig, WorkspaceSettings, decided_allow_builds, no_proxy_scalar, normalize_registry_url,
-    overlay, overlay_some, overlay_tools, registries, resolve, resolve_child_concurrency,
+    Config, Path, PnpmfileSetting, ProxyKeys, ProxyValue, SideEffectsCacheSetting, UpdateConfig,
+    WorkspaceSettings, decided_allow_builds, no_proxy_scalar, normalize_registry_url, overlay,
+    overlay_some, overlay_tools, registries, resolve, resolve_child_concurrency,
     warn_deprecated_pairing,
 };
 
@@ -159,7 +159,10 @@ impl WorkspaceSettings {
             config.pin_lockfile_dir(&resolve(base_dir, &v));
         }
         if let Some(v) = self.store_dir.take() {
-            config.store_dir = StoreDir::from(resolve(base_dir, &v));
+            config.store_dir.relocate(resolve(base_dir, &v));
+        }
+        if let Some(v) = self.store_umask.take() {
+            config.store_dir.set_umask(Some(v));
         }
     }
 

@@ -86,6 +86,18 @@ pub fn set_path_permissions(path: &Path, mode: u32) -> io::Result<()> {
     Ok(())
 }
 
+/// Set the permission bits of `file` to exactly `mode`, a no-op on Windows.
+pub fn set_file_mode(file: &std::fs::File, mode: u32) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::{fs::Permissions, os::unix::fs::PermissionsExt};
+        file.set_permissions(Permissions::from_mode(mode))?;
+    }
+    #[cfg(not(unix))]
+    let _ = (file, mode);
+    Ok(())
+}
+
 /// Add the executable bits (`u+x g+x o+x`) to `file`, a no-op on Windows.
 ///
 /// Skips the `set_permissions` syscall (and the ctime bump it would cause) when

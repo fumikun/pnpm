@@ -33,7 +33,6 @@ use pipe_trait::Pipe;
 use pnpm_env_replace::{SystemEnv, env_replace_lossy, placeholder_ranges};
 use pnpm_network::redact_and_sanitize;
 use pnpm_package_is_installable::SupportedArchitectures;
-use pnpm_store_dir::StoreDir;
 use pnpm_workspace_state::ConfigDependency;
 use registries::RegistryEntry;
 use serde::{Deserialize, Deserializer, de::IgnoredAny};

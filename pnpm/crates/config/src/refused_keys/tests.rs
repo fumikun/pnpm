@@ -88,3 +88,12 @@ fn refusal_is_spelling_insensitive() {
     assert!(!is_refused_by_a_project_manifest("storeDir"));
     assert!(!is_refused_by_a_project_manifest("node-linker"));
 }
+
+#[test]
+fn the_store_umask_is_refused_and_routed_to_the_global_config_file() {
+    assert!(is_refused_by_a_project_manifest("storeUmask"));
+    assert_eq!(
+        where_refused_key_belongs("storeUmask"),
+        "Set it for the machine instead: pnpm config set --global store-umask",
+    );
+}

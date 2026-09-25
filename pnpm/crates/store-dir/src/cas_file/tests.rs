@@ -329,3 +329,79 @@ fn cas_file_path_by_mode_rejects_invalid_hex() {
     assert!(store_dir.cas_file_path_by_mode("abc", 0o644).is_some());
     assert!(store_dir.cas_file_path_by_mode("abcdef", 0o755).is_some());
 }
+
+/// `002` keeps the group write bit a typical process umask (`022`)
+/// clears, so the asserted modes show that the store umask replaced it.
+#[cfg(unix)]
+#[test]
+fn store_umask_sets_the_mode_of_new_files() {
+    use crate::StoreUmask;
+    use std::os::unix::fs::PermissionsExt;
+
+    let tmp = tempfile::tempdir().unwrap();
+    let mut store_dir = StoreDir::new(tmp.path());
+    store_dir.set_umask(Some("002".parse::<StoreUmask>().unwrap()));
+    let mode = |path: &std::path::Path| {
+        std::fs::metadata(path)
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o7777
+    };
+
+    let (plain, _) = store_dir.write_cas_file(b"plain", false).unwrap();
+    let (executable, _) = store_dir.write_cas_file(b"executable", true).unwrap();
+    let (streamed, _, _) = store_dir
+        .write_cas_file_from_reader(&mut &b"streamed"[..], false, None)
+        .unwrap();
+    let (streamed_executable, _, _) = store_dir
+        .write_cas_file_from_reader(&mut &b"streamed executable"[..], true, None)
+        .unwrap();
+
+    assert_eq!(mode(&plain), 0o664);
+    assert_eq!(mode(&executable), 0o775);
+    assert_eq!(mode(&streamed), 0o664);
+    assert_eq!(mode(&streamed_executable), 0o775);
+}
+
+#[cfg(unix)]
+#[test]
+fn store_umask_leaves_files_already_in_the_store_alone() {
+    use crate::StoreUmask;
+    use std::os::unix::fs::PermissionsExt;
+
+    let tmp = tempfile::tempdir().unwrap();
+    let mut store_dir = StoreDir::new(tmp.path());
+    let (buffered, _) = store_dir.write_cas_file(b"buffered", false).unwrap();
+    let (streamed, _) = store_dir.write_cas_file(b"streamed", false).unwrap();
+    for path in [&buffered, &streamed] {
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)).unwrap();
+    }
+
+    store_dir.set_umask(Some("002".parse::<StoreUmask>().unwrap()));
+    store_dir.write_cas_file(b"buffered", false).unwrap();
+    store_dir
+        .write_cas_file_from_reader(&mut &b"streamed"[..], false, None)
+        .unwrap();
+
+    for path in [&buffered, &streamed] {
+        let mode = std::fs::metadata(path)
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o7777;
+        assert_eq!(mode, 0o600, "{path:?}");
+    }
+}
+
+#[test]
+fn relocate_keeps_the_store_umask() {
+    let umask = "077".parse::<crate::StoreUmask>().unwrap();
+    let mut store_dir = StoreDir::new("FIRST");
+    store_dir.set_umask(Some(umask));
+
+    store_dir.relocate("SECOND");
+
+    assert_eq!(store_dir, StoreDir::new("SECOND"));
+    assert_eq!(store_dir.umask(), Some(umask));
+}
